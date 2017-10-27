@@ -7,6 +7,7 @@ student_pid_class.py
 '''
 
 import numpy as np
+import rospy
 
 ###############################################################################
 # This generic PID class will be used to control throttle in project 2, but in
@@ -38,22 +39,20 @@ import numpy as np
 ###############################################################################
 # YOUR CODE BELOW THIS LINE
 ###############################################################################
-
 class student_PID():
 
     def __init__(self, params):
-    	self.kp = params["kp"]
-    	self.ki = params["kp"]
-    	self.kd = params["kp"]
-    	self.k = params["k"]
-        self.max_pwm = params["max_pwm"]
-        self.min_pwm= params["min_pwm"]
-        
+        self.kp = params["kp"]
+        self.ki = params["kp"]
+        self.kd = params["kp"]
+        self.k = params["k"]
+        self.min = params['min_pwm']
+        self.max = params['max_pwm']
+
         pass
 
     def step(self, e, t):
-        return self.k
+        pass
 
     def reset(self):
         pass
-

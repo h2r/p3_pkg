@@ -15,8 +15,9 @@ class AnalyzeFlow(picamera.array.PiMotionAnalysis):
     def analyse(self, a):
         x = a['x']
         y = a['y']
-        self.x_motion =
-        self.y_motion =
+        self.x_motion = ...
+        self.y_motion = ...
+        
 
 # Please fill in this setup function with the parameters you need to initialize.
 # Make sure that you initialize self.x_motion, self.y_motion, and any other
@@ -25,4 +26,13 @@ class AnalyzeFlow(picamera.array.PiMotionAnalysis):
 # also need to figure out the conversion factor (a scalar) that you need to
 # multiply your normalized flow vectors by in order to convert the scale to
 # centimeters
-    def setup(self, camera_wh = (320,240), pub=None, flow_scale = 0.165):
+    def setup(self, camera_wh = (320,240), pub=None, flow_scale = 0.00004):
+        self.x_motion = ...
+        self.y_motion = ...
+
+# Please fill in this function. This will be called in order to get rid of the
+# portion of your flow that is due to rotation of the drone.
+def flow_angle_comp(raw_flow_x, raw_flow_y, d_theta_x_dt, d_theta_y_dt):
+    flow_x = ...
+    flow_y = ...
+    return flow_x, flow_y

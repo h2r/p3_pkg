@@ -2,8 +2,8 @@ from sensor_msgs.msg import Imu
 import tf
 import math
 from visualization_msgs.msg import Marker, MarkerArray
-from pid_class import PID
-from solution_pid_class import student_PID
+from student_flow_class import flow_angle_comp
+from student_pid_class import student_PID
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Range
 from std_msgs.msg import String
@@ -34,13 +34,13 @@ with open("pid_terms.yml", 'r') as stream:
         print 'Failed to load PID terms! Exiting.'
         sys.exit(1)
         
+rospy.init_node('state_controller')
 landing_threshold = 9.
 initial_set_z = 0.12
 set_z = initial_set_z
 smoothed_vel = np.array([0, 0, 0])
 alpha = 1.0
 ultra_z = 0
-pid = PID()
 roll_pid = student_PID(vx_yaml)
 pitch_pid = student_PID(vy_yaml)
 throttle_pid = student_PID(z_yaml)
@@ -62,6 +62,8 @@ cmd_yaw_velocity = 0
 
 mw_angle_comp_x = 0
 mw_angle_comp_y = 0
+d_theta_x_dt = 0
+d_theta_y_dt = 0
 mw_angle_alt_scale = 1.0
 mw_angle_coeff = 10.0
 
@@ -254,7 +256,7 @@ def heartbeat_callback(msg):
     last_heartbeat = rospy.Time.now()
 
 def mode_callback(data):
-    global pid, reset_pid, pid_is, set_z, initial_set_z
+    global reset_pid, pid_is, set_z, initial_set_z
     global roll_pid, pitch_pid, throttle_pid
     print 'GOT NEW MODE', data.mode
     # stefie10: PLEASE use enums here.  
@@ -295,7 +297,6 @@ def mode_callback(data):
 
 def ultra_callback(data):
     global ultra_z, flow_height_z
-    global pid
     global first
     global cmds
     global current_mode
@@ -307,7 +308,6 @@ def ultra_callback(data):
         # XXX jgo experimental thrust  compensation, undoing and moving
         #ultra_z = data.range * mw_angle_alt_scale * mw_angle_alt_scale
         # XXX less experimental
-        pid.throttle.mw_angle_alt_scale = mw_angle_alt_scale
         
         #print mw_angle_alt_scale, data.range, ultra_z # jgo
         # print 'ultra_z', ultra_z
@@ -353,15 +353,23 @@ def ultra_callback(data):
 # "self.mw_angle", etc.
 def plane_callback(data):
     global error
-    global mw_angle_comp_x, mw_angle_comp_y
+    global mw_angle_comp_x, mw_angle_comp_y, d_theta_x_dt, d_theta_y_dt
     global flow_height_z
     global set_vel_x, set_vel_y
     global flow_x_old, flow_y_old
     #print set_vel_x, set_vel_y
     #error.x.err = (data.x.err - mw_angle_comp_x) * min(ultra_z, 30.) + set_vel_x
     #error.y.err = (data.y.err + mw_angle_comp_y) * min(ultra_z, 30.) + set_vel_y
-    error.x.err = (data.x.err - mw_angle_comp_x) * ultra_z + set_vel_x
-    error.y.err = (data.y.err + mw_angle_comp_y) * ultra_z + set_vel_y
+    # IZZY - now angle compensation is handled by flow_angle_comp
+    raw_flow_x = data.x.err
+    raw_flow_y = data.y.err
+    translate_flow_x, translate_flow_y = flow_angle_comp(raw_flow_x, raw_flow_y, d_theta_x_dt, d_theta_y_dt)
+    error.x.err = (translate_flow_x) * ultra_z + set_vel_x
+    error.y.err = (translate_flow_y) * ultra_z + set_vel_y
+   
+    # IZZY - this was the original
+    # error.x.err = (data.x.err - mw_angle_comp_x) * ultra_z + set_vel_x
+    # error.y.err = (data.y.err + mw_angle_comp_y) * ultra_z + set_vel_y
 
 #    alpha = 0.5
 #    error.x.err = error.x.err * alpha + (1. - alpha) * flow_x_old
@@ -381,14 +389,12 @@ if __name__ == '__main__':
     # stefie10: PUt all this code in a main() method.  The globals
     # should be fields in a class for the controller, as should all
     # the callbacks.
-    global mw_angle_comp_x, mw_angle_comp_y, mw_angle_coeff, mw_angle_alt_scale
+    global mw_angle_comp_x, mw_angle_comp_y, mw_angle_coeff, mw_angle_alt_scale, d_theta_x_dt, d_theta_y_dt
     global current_mode
-    rospy.init_node('state_controller')
     rospy.Subscriber("/pidrone/plane_err", axes_err, plane_callback)
     board = MultiWii("/dev/ttyUSB0")
     rospy.Subscriber("/pidrone/infrared", Range, ultra_callback)
-    #rospy.Subscriber("/pidrone/vrpn_pos", PoseStamped, vrpn_callback)
-    rospy.Subscriber("/pidrone/set_mode_vel", Mode, mode_callback)
+    rospy.Subscriber("/pidrone/set_mode", Mode, mode_callback)
     rospy.Subscriber("/pidrone/heartbeat", String, heartbeat_callback)
     global last_heartbeat
     last_heartbeat = rospy.Time.now()
@@ -431,14 +437,20 @@ if __name__ == '__main__':
             try:
                 # stefie10: Put this code inside of a method or several methods. 
 
-                new_angt = time.time()
+                new_angt = rospy.get_time()
                 new_angx = mw_data['angx']/180.0*np.pi
                 new_angy = mw_data['angy']/180.0*np.pi
+
+                # IZZY - is it just me or is this def a bug? should be divided by dt, not multiplied?
                 mw_angle_comp_x = np.tan((new_angx - prev_angx) * (new_angt - prev_angt)) * mw_angle_coeff
                 mw_angle_comp_y = np.tan((new_angy - prev_angy) * (new_angt - prev_angt)) * mw_angle_coeff
                 d_theta_x = new_angx - prev_angx
                 d_theta_y = new_angy - prev_angy
                 dt = new_angt - prev_angt
+
+                # IZZY - added for angle compensation in callback
+                d_theta_x_dt = d_theta_x/dt
+                d_theta_y_dt = d_theta_y/dt
 
                 angle_mag = np.arccos(np.cos(d_theta_x * dt) * np.cos(d_theta_y * dt))
 #               mw_angle_comp_x = np.sin(d_theta_x * dt) * angle_mag * mw_angle_coeff
@@ -458,7 +470,8 @@ if __name__ == '__main__':
                     print "Landing because a safety check failed."
                     break
 
-            except:
+            except Exception as e:
+                print e
                 print "BOARD ERRORS!!!!!!!!!!!!!!"
                 print "BOARD ERRORS!!!!!!!!!!!!!!"
                 print "BOARD ERRORS!!!!!!!!!!!!!!"
@@ -473,7 +486,7 @@ if __name__ == '__main__':
                 # exit.
                 board.close()
 
-        print cmds
+        #print cmds
         board.sendCMD(8, MultiWii.SET_RAW_RC, cmds)
         board.receiveDataPacket()
         time.sleep(0.01)

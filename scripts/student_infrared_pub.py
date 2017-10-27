@@ -26,13 +26,10 @@ import Adafruit_ADS1x15
 # Measure (with a ruler or tape measure) to estimate your paramters.
 
 def calc_distance(voltage):
-    return 0
-
 # Implement exponentional moving average smoothing. The return from this
 # function will be passed in again the next time it is called
 
 def exp_smooth(raw_dist, prev_smooth_dist, alpha):
-    return raw_dist
 
 ###############################################################################
 # YOUR CODE ABOVE
@@ -47,13 +44,14 @@ def main():
     ###############################################################################
     # YOUR CODE HERE
     ###############################################################################
-    alpha = 0.3 # feel free to adjust the amount of smoothing
+    alpha = 0.15 # feel free to adjust the amount of smoothing
 
     # (1) initialize a publisher that publishes a Range message to the topic
     # '/pidrone/infrared' with a queue_size of 1
 
     # (2) instantiate a Range message which you will update and publish in the while
     # loop below. 
+
 
     prev_smooth_dist = None
     while not rospy.is_shutdown():
@@ -66,9 +64,10 @@ def main():
 
         # (3) set the timestamp on the Range message using get_rostime. Set the
         # Range to your smoothed distance estimate. 
-
+                                                    
+                                     
         # (4)Publish the message!
-
+                               
     ###############################################################################
     # YOUR CODE ABOVE
     ###############################################################################
